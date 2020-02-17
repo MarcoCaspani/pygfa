@@ -27,6 +27,8 @@ from pygfa.graph_operations.compression import compression_graph_by_nodes, compr
 from pygfa.graph_operations.overlap_consistency import check_overlap
 from benchmark.extract_subgraph import extract_subgraph
 
+import pygfa.algorithms.disjoint_sets as disjoint_sets
+
 GRAPH_LOGGER = logging.getLogger(__name__)
 
 class InvalidSearchParameters(Exception):
@@ -48,7 +50,7 @@ def _index(obj, other):
     """Given an object O and a list
     of objects L check that exist an object O'
     in the list such that O == O'.
-    
+
     :return True: If O' exists.
     :return: The position of O' in the list.
     """
@@ -92,6 +94,39 @@ class GFA(DovetailIterator):
         self._subgraphs = {}
         self._next_virtual_id = 0 if base_graph is None else \
                                 self._find_max_virtual_id()
+
+    def get_reachable_vertices_from(self, vertex: str) -> set:
+        nodes = self._graph.nodes() # Because self.nodes() contains deprecated code
+        edges = self.edges()
+
+        # PREPROCESSING (Group vertices - uses disjoint sets data structure)
+        disjoint_collection = disjoint_sets.new_collection(nodes)
+
+        # if the asked vertex does not exist don't even process the gfa
+        if not vertex in disjoint_collection:
+            return "vertex \"" + vertex + "\" could not be found"
+
+        for edge in edges:
+            u = edge[0]
+            v = edge[1]
+            rep_u = disjoint_sets.find_set(disjoint_collection, u)
+            rep_v = disjoint_sets.find_set(disjoint_collection, v)
+
+            if rep_u != rep_v:
+                disjoint_collection = disjoint_sets.union(disjoint_collection, \
+                                                          rep_u, \
+                                                          rep_v)
+        # # to see all the grouping results
+        # for key in self.vertices_groups:
+        #     self.vertices_groups[key].print()
+
+        """
+        From here you can ask as many times as you want which vertices are
+        reachable from a vertex because the result is always given in time O(1)
+        """
+        v_representative = disjoint_sets.find_set(disjoint_collection, vertex)
+        return disjoint_collection[v_representative].descendants
+
 
     def __contains__(self, id_):
         try:
